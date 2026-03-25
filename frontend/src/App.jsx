@@ -7,7 +7,7 @@ import Vote from "./pages/Vote"
 export default function App() {
   return (
     <WakeUp>
-      <BrowserRouter>
+      <BrowserRouter basename="/votelive">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/create" element={<CreatePoll />} />
