@@ -1,0 +1,15 @@
+fastapi          # web framework — handles HTTP requests
+uvicorn          # runs the FastAPI app (like a waiter serving requests)
+sqlalchemy       # ORM — lets us write Python instead of raw SQL
+psycopg2-binary  # PostgreSQL driver — SQLAlchemy needs this to talk to Postgres
+python-dotenv    # reads .env file into os.getenv()
+redis            # Redis client library
+pydantic         # data validation — checks request body shape
+python-jose      # creates and verifies JWT tokens
+passlib          # password hashing
+python-multipart # needed for form data in FastAPI
+
+pytest
+pytest-asyncio
+httpx
+

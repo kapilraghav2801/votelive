@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+.env
+test_votelive.db
+*.sqlite3
