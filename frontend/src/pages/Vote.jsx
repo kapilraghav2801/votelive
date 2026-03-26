@@ -1,19 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Navbar from '../components/Navbar';
 import API from '../constants/api';
-
-const VOTER_ID_KEY = 'votelive_voter_id';
-
-function getVoterId() {
-  let id = localStorage.getItem(VOTER_ID_KEY);
-  if (!id) {
-    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    localStorage.setItem(VOTER_ID_KEY, id);
-  }
-  return id;
-}
+import { getVoterId } from '../utils/voter';
 
 export default function Vote() {
   const { roomKey } = useParams();
@@ -25,55 +15,104 @@ export default function Vote() {
   const [error, setError] = useState('');
   const [expired, setExpired] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
+  const [ending, setEnding] = useState(false);
   const wsRef = useRef(null);
+  const timerRef = useRef(null);
 
+  const isCreator = poll?.creator_id && poll.creator_id === getVoterId();
+
+  // Fetch poll + results, connect WebSocket
   useEffect(() => {
+    let cancelled = false;
+
     axios
       .get(`${API}/polls/${roomKey}`)
       .then((r) => {
+        if (cancelled) return;
         setPoll(r.data);
-        checkExpiry(r.data.expires_at);
       })
-      .catch(() => setError('Poll not found'));
+      .catch(() => {
+        if (!cancelled) setError('Poll not found');
+      });
 
     axios
       .get(`${API}/votes/${roomKey}/results`)
-      .then((r) => setResults(r.data.results || []))
+      .then((r) => {
+        if (!cancelled) setResults(r.data.results || []);
+      })
       .catch(() => {});
 
     // WebSocket for live updates
-    const ws = new WebSocket(`${API.replace('http', 'ws')}/ws/${roomKey}`);
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.type === 'current_results') {
-        setResults(
-          data.leaderboard.map((item) => ({
-            option_id: item.option_id,
-            vote_count: item.vote_count,
-          })),
-        );
-      } else if (data.option_id) {
-        setResults((prev) => {
-          const updated = [...prev];
-          const idx = updated.findIndex((r) => r.option_id === data.option_id);
-          if (idx >= 0)
-            updated[idx] = { ...updated[idx], vote_count: data.vote_count };
-          else
-            updated.push({
-              option_id: data.option_id,
-              vote_count: data.vote_count,
-            });
-          return updated;
-        });
+    const connectWs = () => {
+      try {
+        const ws = new WebSocket(`${API.replace('http', 'ws')}/ws/${roomKey}`);
+        ws.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'current_results') {
+              setResults(
+                data.leaderboard.map((item) => ({
+                  option_id: item.option_id,
+                  vote_count: item.vote_count,
+                })),
+              );
+            } else if (data.option_id) {
+              setResults((prev) => {
+                const updated = [...prev];
+                const idx = updated.findIndex(
+                  (r) => r.option_id === data.option_id,
+                );
+                if (idx >= 0)
+                  updated[idx] = {
+                    ...updated[idx],
+                    vote_count: data.vote_count,
+                  };
+                else
+                  updated.push({
+                    option_id: data.option_id,
+                    vote_count: data.vote_count,
+                  });
+                return updated;
+              });
+            }
+          } catch {}
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+          // Reconnect after 3 seconds if not intentionally closed
+          if (!cancelled) {
+            setTimeout(() => {
+              if (!cancelled) {
+                wsRef.current = connectWs();
+              }
+            }, 3000);
+          }
+        };
+        wsRef.current = ws;
+        return ws;
+      } catch {
+        return null;
       }
     };
-    wsRef.current = ws;
-    return () => ws.close();
+
+    connectWs();
+
+    return () => {
+      cancelled = true;
+      if (wsRef.current) {
+        try {
+          wsRef.current.close();
+        } catch {}
+      }
+    };
   }, [roomKey]);
 
-  const checkExpiry = (expiresAt) => {
+  // Timer — separate effect so cleanup works properly
+  useEffect(() => {
+    if (!poll?.expires_at) return;
+
+    const expiresAt = poll.expires_at;
     const update = () => {
-      // Ensure the datetime is treated as UTC
       const utcExpiry =
         expiresAt.endsWith('Z') || expiresAt.includes('+')
           ? expiresAt
@@ -82,6 +121,7 @@ export default function Vote() {
       if (diff <= 0) {
         setExpired(true);
         setTimeLeft('Closed');
+        clearInterval(timerRef.current);
         return;
       }
       const m = Math.floor(diff / 60000);
@@ -89,9 +129,9 @@ export default function Vote() {
       setTimeLeft(`${m}:${s.toString().padStart(2, '0')}`);
     };
     update();
-    const t = setInterval(update, 1000);
-    return () => clearInterval(t);
-  };
+    timerRef.current = setInterval(update, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [poll?.expires_at]);
 
   const castVote = async (optionId) => {
     if (voted || expired) return;
@@ -102,7 +142,6 @@ export default function Vote() {
       });
       setVoted(true);
       setSelectedOption(optionId);
-      // refresh results
       const r = await axios.get(`${API}/votes/${roomKey}/results`);
       setResults(r.data.results || []);
     } catch (e) {
@@ -113,6 +152,24 @@ export default function Vote() {
         setError('Vote failed. Try again.');
       }
     }
+  };
+
+  const endPoll = async () => {
+    if (ending) return;
+    setEnding(true);
+    try {
+      await axios.patch(`${API}/polls/${roomKey}/end`, {
+        creator_id: getVoterId(),
+      });
+      setExpired(true);
+      setTimeLeft('Closed');
+      // Refresh poll data to get updated expires_at
+      const r = await axios.get(`${API}/polls/${roomKey}`);
+      setPoll(r.data);
+    } catch {
+      setError('Failed to end poll');
+    }
+    setEnding(false);
   };
 
   const maxVotes = Math.max(...results.map((r) => r.vote_count || 0), 1);
@@ -241,7 +298,6 @@ export default function Vote() {
                   transition: 'border 0.2s',
                 }}
               >
-                {/* Progress bar background */}
                 {showResults && count > 0 && (
                   <div
                     style={{
@@ -255,7 +311,6 @@ export default function Vote() {
                     }}
                   />
                 )}
-
                 <div
                   style={{
                     position: 'relative',
@@ -334,6 +389,105 @@ export default function Vote() {
           >
             This poll is closed
           </p>
+        )}
+
+        {/* End Poll button — only visible to creator when poll is active */}
+        {isCreator && !expired && (
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
+            <button
+              onClick={endPoll}
+              disabled={ending}
+              style={{
+                padding: '10px 24px',
+                background: 'transparent',
+                border: '1px solid #ff4444',
+                borderRadius: 8,
+                color: '#ff4444',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: ending ? 'default' : 'pointer',
+                opacity: ending ? 0.5 : 1,
+              }}
+            >
+              {ending ? 'Ending...' : 'End Poll Early'}
+            </button>
+          </div>
+        )}
+
+        {/* Results summary when expired */}
+        {expired && totalVotes > 0 && (
+          <div
+            style={{
+              marginTop: 32,
+              padding: '20px',
+              border: '1px solid #1a1a1a',
+              borderRadius: 10,
+              background: '#0d0d0d',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                color: '#444',
+                fontFamily: "'Space Mono', monospace",
+                letterSpacing: 1,
+                marginBottom: 12,
+              }}
+            >
+              FINAL RESULTS
+            </div>
+            {[...results]
+              .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
+              .map((r, i) => {
+                const opt = poll.options.find((o) => o.id === r.option_id);
+                const pct =
+                  totalVotes > 0
+                    ? Math.round((r.vote_count / totalVotes) * 100)
+                    : 0;
+                return (
+                  <div
+                    key={r.option_id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      padding: '8px 0',
+                      borderBottom:
+                        i < results.length - 1 ? '1px solid #1a1a1a' : 'none',
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: i === 0 ? '#e8e8e8' : '#888',
+                        fontSize: 14,
+                        fontWeight: i === 0 ? 700 : 400,
+                      }}
+                    >
+                      {i === 0 ? '🏆 ' : ''}
+                      {opt?.text || `Option ${r.option_id}`}
+                    </span>
+                    <span
+                      style={{
+                        color: '#555',
+                        fontFamily: "'Space Mono', monospace",
+                        fontSize: 13,
+                      }}
+                    >
+                      {r.vote_count} ({pct}%)
+                    </span>
+                  </div>
+                );
+              })}
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 12,
+                color: '#444',
+                textAlign: 'center',
+              }}
+            >
+              Total: {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
+            </div>
+          </div>
         )}
 
         {/* Share */}

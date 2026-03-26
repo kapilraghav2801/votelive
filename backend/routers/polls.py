@@ -5,6 +5,8 @@ from database import get_db
 from models import Poll, Option
 from schemas import PollCreate, PollResponse
 from auth import generate_room_key
+from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter(prefix="/polls", tags=["polls"])
 
@@ -31,7 +33,8 @@ def create_poll(poll_data: PollCreate, db: Session = Depends(get_db)):
         title=poll_data.title,
         room_key=room_key,
         is_blind=poll_data.is_blind,
-        expires_at=expires_at
+        expires_at=expires_at,
+        creator_id=poll_data.creator_id
     )
     db.add(poll)
     db.flush()  # assigns poll.id without committing yet
@@ -67,3 +70,25 @@ def list_polls(db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
     polls = db.query(Poll).filter(Poll.expires_at > now).all()
     return polls
+
+
+class EndPollRequest(BaseModel):
+    creator_id: str
+
+
+@router.patch("/{room_key}/end")
+def end_poll(room_key: str, body: EndPollRequest, db: Session = Depends(get_db)):
+    """
+    Ends a poll early — only the creator can do this
+    Sets expires_at to now so the poll is immediately closed
+    """
+    poll = db.query(Poll).filter(Poll.room_key == room_key).first()
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    if not poll.creator_id:
+        raise HTTPException(status_code=403, detail="This poll has no creator set — cannot be ended early")
+    if poll.creator_id != body.creator_id:
+        raise HTTPException(status_code=403, detail="Only the creator can end this poll")
+    poll.expires_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "Poll ended", "room_key": room_key}

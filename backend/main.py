@@ -3,11 +3,23 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text, inspect
 from database import Base, engine
 from routers import polls, votes, websocket
 
 # create all tables on startup
 Base.metadata.create_all(bind=engine)
+
+# auto-migrate: add creator_id column if missing (for existing databases)
+try:
+    insp = inspect(engine)
+    columns = [c['name'] for c in insp.get_columns('polls')]
+    if 'creator_id' not in columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE polls ADD COLUMN creator_id VARCHAR"))
+            conn.commit()
+except Exception:
+    pass
 
 app = FastAPI(
     title="VoteLive",

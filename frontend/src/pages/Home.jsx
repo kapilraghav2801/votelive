@@ -1,14 +1,18 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import Navbar from "../components/Navbar"
+import { getVoterName, setVoterName } from "../utils/voter"
 
 export default function Home() {
+  const [name, setName] = useState(getVoterName())
   const [roomKey, setRoomKey] = useState("")
   const [error, setError] = useState("")
   const navigate = useNavigate()
 
   const join = () => {
+    if (!name.trim()) { setError("Enter your name first"); return }
     if (!roomKey.trim()) { setError("Enter a room key"); return }
+    setVoterName(name.trim())
     navigate(`/vote/${roomKey.trim().toLowerCase()}`)
   }
 
@@ -53,27 +57,40 @@ export default function Home() {
             }}>
               Join a poll
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <input
-                placeholder="Enter room key (e.g. abc123)"
-                value={roomKey}
-                onChange={e => { setRoomKey(e.target.value); setError("") }}
-                onKeyDown={e => e.key === "Enter" && join()}
+                placeholder="Your name"
+                value={name}
+                onChange={e => { setName(e.target.value); setError("") }}
                 style={{
-                  flex: 1, padding: "11px 14px",
+                  padding: "11px 14px",
                   background: "#111", border: "1px solid #222",
                   borderRadius: 8, color: "#e8e8e8",
-                  fontSize: 14, outline: "none",
-                  letterSpacing: 2, fontFamily: "'Space Mono', monospace"
+                  fontSize: 14, outline: "none"
                 }}
               />
-              <button onClick={join} style={{
-                padding: "11px 20px", background: "#e8e8e8",
-                color: "#000", border: "none", borderRadius: 8,
-                fontWeight: 700, fontSize: 14, cursor: "pointer"
-              }}>
-                Join
-              </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input
+                  placeholder="Enter room key (e.g. abc123)"
+                  value={roomKey}
+                  onChange={e => { setRoomKey(e.target.value); setError("") }}
+                  onKeyDown={e => e.key === "Enter" && join()}
+                  style={{
+                    flex: 1, padding: "11px 14px",
+                    background: "#111", border: "1px solid #222",
+                    borderRadius: 8, color: "#e8e8e8",
+                    fontSize: 14, outline: "none",
+                    letterSpacing: 2, fontFamily: "'Space Mono', monospace"
+                  }}
+                />
+                <button onClick={join} style={{
+                  padding: "11px 20px", background: "#e8e8e8",
+                  color: "#000", border: "none", borderRadius: 8,
+                  fontWeight: 700, fontSize: 14, cursor: "pointer"
+                }}>
+                  Join
+                </button>
+              </div>
             </div>
             {error && <p style={{ color: "#ff4444", fontSize: 12, marginTop: 8 }}>{error}</p>}
           </div>

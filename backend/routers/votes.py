@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import get_db
 from models import Vote, Option, Poll
 from schemas import VoteCreate, VoteResponse
@@ -7,6 +8,9 @@ from auth import is_poll_expired, create_voter_token
 import redis.asyncio as aioredis
 import os
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/votes", tags=["votes"])
 
@@ -93,30 +97,43 @@ async def cast_vote(
 @router.get("/{room_key}/results")
 async def get_results(room_key: str, db: Session = Depends(get_db)):
     """
-    Returns current vote counts from Redis
-    Fast — no database query for counts
+    Returns current vote counts — tries Redis first, falls back to database
     """
     poll = db.query(Poll).filter(Poll.room_key == room_key).first()
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
 
-    r = get_redis()
-
-    # ZREVRANGE returns options sorted by votes descending
-    # WITHSCORES returns the score alongside each member
-    leaderboard = await r.zrevrange(
-        f"poll:{poll.id}:votes", 0, -1, withscores=True
-    )
-
     results = []
-    for option_id, score in leaderboard:
-        option = db.query(Option).filter(Option.id == int(option_id)).first()
-        if option:
-            results.append({
-                "option_id": int(option_id),
-                "option_text": option.text,
-                "vote_count": int(score)
-            })
+    try:
+        r = get_redis()
+        leaderboard = await r.zrevrange(
+            f"poll:{poll.id}:votes", 0, -1, withscores=True
+        )
+        for option_id, score in leaderboard:
+            option = db.query(Option).filter(Option.id == int(option_id)).first()
+            if option:
+                results.append({
+                    "option_id": int(option_id),
+                    "option_text": option.text,
+                    "vote_count": int(score)
+                })
+    except Exception:
+        logger.warning("Redis unavailable, falling back to database counts")
+        # fallback: count votes from database
+        counts = (
+            db.query(Vote.option_id, func.count(Vote.id))
+            .filter(Vote.poll_id == poll.id)
+            .group_by(Vote.option_id)
+            .all()
+        )
+        for option_id, count in counts:
+            option = db.query(Option).filter(Option.id == option_id).first()
+            if option:
+                results.append({
+                    "option_id": option_id,
+                    "option_text": option.text,
+                    "vote_count": count
+                })
 
     return {
         "poll_id": poll.id,

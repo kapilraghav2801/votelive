@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import axios from "axios"
 import Navbar from "../components/Navbar"
 import API from "../constants/api"
+import { getVoterId } from "../utils/voter"
 
 const inp = {
   width: "100%", padding: "10px 14px",
@@ -47,7 +48,8 @@ export default function CreatePoll() {
         title,
         options: filled.map(text => ({ text })),
         duration_minutes: duration,
-        is_blind: isBlind
+        is_blind: isBlind,
+        creator_id: getVoterId()
       })
       navigate(`/vote/${res.data.room_key}`)
     } catch {

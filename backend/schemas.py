@@ -23,6 +23,7 @@ class PollCreate(BaseModel):
     options: List[OptionCreate]        # ["Pizza", "Biryani", "Momos"]
     is_blind: int = 0                  # default = not blind
     duration_minutes: int = Field(default=5, ge=1, le=60)  # 1–60 minutes
+    creator_id: Optional[str] = None   # voter_id of the creator
 
 class PollResponse(BaseModel):
     id: int
@@ -31,6 +32,7 @@ class PollResponse(BaseModel):
     is_blind: int
     expires_at: datetime
     created_at: datetime
+    creator_id: Optional[str] = None
     options: List[OptionResponse] = []
 
     class Config:

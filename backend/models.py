@@ -12,6 +12,7 @@ class Poll(Base):
     is_blind = Column(Integer, default=0)         # 1 = hide results until closed
     expires_at = Column(DateTime, nullable=False) # when poll auto-closes
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    creator_id = Column(String, nullable=True)     # voter_id of person who created it
 
     # one poll has many options
     # if poll deleted → delete all its options too
