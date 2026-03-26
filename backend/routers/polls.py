@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from database import get_db
 from models import Poll, Option
 from schemas import PollCreate, PollResponse
@@ -24,7 +24,7 @@ def create_poll(poll_data: PollCreate, db: Session = Depends(get_db)):
             break
 
     # calculate when poll expires
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=poll_data.duration_minutes)
+    expires_at = datetime.utcnow() + timedelta(minutes=poll_data.duration_minutes)
 
     # create poll
     poll = Poll(
@@ -64,6 +64,6 @@ def list_polls(db: Session = Depends(get_db)):
     Lists all active polls
     Only returns polls that haven't expired yet
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     polls = db.query(Poll).filter(Poll.expires_at > now).all()
     return polls
