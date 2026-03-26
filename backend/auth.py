@@ -1,7 +1,7 @@
 import random
 import string
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 
 SECRET_KEY = os.getenv("SECRET_KEY", "votelive-secret-key")
@@ -26,7 +26,7 @@ def create_voter_token(voter_id: str, poll_id: int) -> str:
     payload = {
         "voter_id": voter_id,
         "poll_id": poll_id,
-        "exp": datetime.utcnow() + timedelta(hours=24)
+        "exp": datetime.now(timezone.utc) + timedelta(hours=24)
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -47,4 +47,8 @@ def is_poll_expired(expires_at: datetime) -> bool:
     """
     Checks if a poll has passed its expiry time
     """
-    return datetime.utcnow() > expires_at
+    now = datetime.now(timezone.utc)
+    # If expires_at is naive (no timezone), assume it's UTC
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return now > expires_at

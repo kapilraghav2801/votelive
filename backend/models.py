@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from database import Base
 
 class Poll(Base):
@@ -11,7 +11,7 @@ class Poll(Base):
     room_key = Column(String, unique=True, index=True)  # "abc123" — join link
     is_blind = Column(Integer, default=0)         # 1 = hide results until closed
     expires_at = Column(DateTime, nullable=False) # when poll auto-closes
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # one poll has many options
     # if poll deleted → delete all its options too
@@ -39,7 +39,7 @@ class Vote(Base):
     option_id = Column(Integer, ForeignKey("options.id"), nullable=False)
     poll_id = Column(Integer, ForeignKey("polls.id"), nullable=False)
     voter_id = Column(String, nullable=False)     # UUID from browser localStorage
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # one person can only vote once per poll
     # database enforces this at the constraint level
