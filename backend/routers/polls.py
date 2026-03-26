@@ -7,6 +7,9 @@ from schemas import PollCreate, PollResponse
 from auth import generate_room_key
 from pydantic import BaseModel
 from typing import Optional
+import redis
+import json
+import os
 
 router = APIRouter(prefix="/polls", tags=["polls"])
 
@@ -81,6 +84,7 @@ def end_poll(room_key: str, body: EndPollRequest, db: Session = Depends(get_db))
     """
     Ends a poll early — only the creator can do this
     Sets expires_at to now so the poll is immediately closed
+    Broadcasts poll_ended event to all WebSocket clients via Redis
     """
     poll = db.query(Poll).filter(Poll.room_key == room_key).first()
     if not poll:
@@ -91,4 +95,14 @@ def end_poll(room_key: str, body: EndPollRequest, db: Session = Depends(get_db))
         raise HTTPException(status_code=403, detail="Only the creator can end this poll")
     poll.expires_at = datetime.now(timezone.utc)
     db.commit()
+    
+    # Broadcast poll ended event to all WebSocket clients
+    try:
+        r = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+        message = json.dumps({"type": "poll_ended"})
+        r.publish(f"poll:{poll.id}:updates", message)
+        r.close()
+    except:
+        pass  # Redis unavailable, but poll is already ended in DB
+    
     return {"message": "Poll ended", "room_key": room_key}

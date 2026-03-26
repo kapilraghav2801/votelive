@@ -49,7 +49,19 @@ export default function Vote() {
         ws.onmessage = (e) => {
           try {
             const data = JSON.parse(e.data);
-            if (data.type === 'current_results') {
+            if (data.type === 'poll_ended') {
+              // Poll was ended by creator — immediately show closed state
+              setExpired(true);
+              setTimeLeft('Closed');
+              if (timerRef.current) clearInterval(timerRef.current);
+              // Refresh poll data to ensure UI is in sync
+              axios
+                .get(`${API}/polls/${roomKey}`)
+                .then((r) => {
+                  if (!cancelled) setPoll(r.data);
+                })
+                .catch(() => {});
+            } else if (data.type === 'current_results') {
               setResults(
                 data.leaderboard.map((item) => ({
                   option_id: item.option_id,
@@ -163,9 +175,13 @@ export default function Vote() {
       });
       setExpired(true);
       setTimeLeft('Closed');
-      // Refresh poll data to get updated expires_at
-      const r = await axios.get(`${API}/polls/${roomKey}`);
-      setPoll(r.data);
+      // Clear timer immediately
+      if (timerRef.current) clearInterval(timerRef.current);
+      // Refresh poll data and results to show final state
+      const pollResp = await axios.get(`${API}/polls/${roomKey}`);
+      setPoll(pollResp.data);
+      const resultsResp = await axios.get(`${API}/votes/${roomKey}/results`);
+      setResults(resultsResp.data.results || []);
     } catch {
       setError('Failed to end poll');
     }

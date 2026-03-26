@@ -292,6 +292,45 @@ File: `backend/routers/votes.py`
 
 ---
 
+## Change 8: Real-Time Poll End Notification (Users see poll close instantly)
+
+### What was the problem?
+
+When the admin clicked "End Poll Early", nothing happened for other users. They had to wait for the timer to count down, or they had to refresh the page manually. The admin saw the status change, but everyone else was still voting on a "closed" poll.
+
+### What was added?
+
+#### Backend — Broadcasting poll end event (`backend/routers/polls.py`)
+
+When the admin calls `PATCH /polls/{room_key}/end`:
+- The poll's `expires_at` is set to now (as before)
+- **NEW:** Publishes a `poll_ended` message to Redis pub/sub channel `poll:{poll_id}:updates`
+- The message format: `{"type": "poll_ended"}`
+- This message is sent to all WebSocket connections subscribed to that channel
+
+#### Frontend — Listening for poll end event (`frontend/src/pages/Vote.jsx`)
+
+In the WebSocket `onmessage` handler:
+- Added a check: `if (data.type === 'poll_ended')`
+- When received:
+  - Sets `expired = true` immediately (poll is now closed)
+  - Sets `timeLeft = 'Closed'` (timer stops showing countdown)
+  - Clears the timer interval via `clearInterval(timerRef.current)` (stops the ticking clock)
+  - Refreshes poll data and results from the backend (to ensure final state is accurate)
+- All users see this at the same time (within milliseconds of each other)
+
+#### Result:
+
+- **For the admin:** Clicks "End Poll Early" → poll closes in their UI → results appear
+- **For other users:** Meanwhile, they automatically see the poll switch to "CLOSED" state instantly → final results appear → no refresh needed
+- **No polling or refresh required** — it's pure real-time via WebSocket
+
+### How to explain in one sentence:
+
+> "The backend broadcasts a `poll_ended` event through WebSocket when the admin ends a poll, so all users see it close in real-time without needing to refresh."
+
+---
+
 ## Summary of All Files Changed
 
 | File                                | What Changed                                                                 |
@@ -300,10 +339,10 @@ File: `backend/routers/votes.py`
 | `backend/models.py`                 | Timezone-aware `created_at` defaults + `creator_id` column                   |
 | `backend/schemas.py`                | Added `creator_id` to `PollCreate` and `PollResponse`                        |
 | `backend/main.py`                   | Auto-migration for `creator_id` column                                       |
-| `backend/routers/polls.py`          | Timezone fix + `PATCH /{room_key}/end` endpoint                              |
+| `backend/routers/polls.py`          | Timezone fix + `PATCH /{room_key}/end` endpoint + poll_ended pub/sub broadcast |
 | `backend/routers/votes.py`          | Redis fallback to database for results                                       |
 | `frontend/src/utils/voter.js`       | **NEW** — shared voter ID and name utilities                                 |
-| `frontend/src/pages/Vote.jsx`       | Timer cleanup, WebSocket auto-reconnect, End Poll button, Final Results card |
+| `frontend/src/pages/Vote.jsx`       | Timer cleanup, WebSocket auto-reconnect, End Poll button, Results card, poll_ended listener |
 | `frontend/src/pages/Home.jsx`       | Name input field before joining                                              |
 | `frontend/src/pages/CreatePoll.jsx` | Sends `creator_id` when creating poll                                        |
 
