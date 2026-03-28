@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text, inspect
 from database import Base, engine
 from routers import polls, votes, websocket
+from guess_game.routes import router as guess_game_router
+from guess_game.ws_handler import router as guess_game_ws_router
 
 # create all tables on startup
 Base.metadata.create_all(bind=engine)
@@ -37,6 +39,8 @@ app.add_middleware(
 app.include_router(polls.router)
 app.include_router(votes.router)
 app.include_router(websocket.router)
+app.include_router(guess_game_router)
+app.include_router(guess_game_ws_router)
 
 
 @app.get("/")

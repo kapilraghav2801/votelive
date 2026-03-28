@@ -1,0 +1,7 @@
+#Guessing Game
+
+1- I'm thinking to add new features here like i have seen many viral reel videos of Guessing Game where 2 user choose 1-1 number and other people need to guess, only hint they will give like whether the number which i have guessed in my chance is greater or lower only.
+
+a: so here i want to use my exisiting things like poll key generated which will be use to create room key with the name like user and then room will be created and user1 have to choose from the range 1-100 or 1-500, 1-1000 or any range then they need to choose from the range one number like user1 choose 1-100 and in which suppose they choose 94 and timer for each guessing default should be 10 seconds then they to submit and then whoever in the room with the name and same room key will get a notification like user1 choose 1-100 range and choose one number now you user 2 need to choose one number from range 1-100 then submit if user2 choose 65 then again user1 got a notification to start the game now user1 has to guess within 10 seconds which will be show on the screen and for user2 screen it will show like user1 is guessing and show the timer countdown for user2 as well once they press guessed by choosing from number keyboard then user1 screen will show if they choose 65 then will be clear winner other wise if they choose 50 then it show user2 number will be higher or lower so 50 is lower then user2 chance got unlocked now they type once user1 guessed or their timer got completed
+
+I have created guessingGame.md

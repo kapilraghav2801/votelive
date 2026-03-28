@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from typing import List, Optional
 
@@ -11,9 +11,7 @@ class OptionResponse(BaseModel):
     id: int
     text: str
     vote_count: int = 0                # computed — not stored in DB
-
-    class Config:
-        from_attributes = True         # allows SQLAlchemy model → Pydantic
+    model_config = ConfigDict(from_attributes=True)  # allows SQLAlchemy model → Pydantic
 
 
 # --- Poll Schemas ---
@@ -34,9 +32,7 @@ class PollResponse(BaseModel):
     created_at: datetime
     creator_id: Optional[str] = None
     options: List[OptionResponse] = []
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Vote Schemas ---
