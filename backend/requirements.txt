@@ -1,5 +1,5 @@
 fastapi          # web framework — handles HTTP requests
-uvicorn          # runs the FastAPI app (like a waiter serving requests)
+uvicorn[standard] # runs the FastAPI app (like a waiter serving requests), [standard] includes websocket support
 sqlalchemy       # ORM — lets us write Python instead of raw SQL
 psycopg2-binary  # PostgreSQL driver — SQLAlchemy needs this to talk to Postgres
 python-dotenv    # reads .env file into os.getenv()
